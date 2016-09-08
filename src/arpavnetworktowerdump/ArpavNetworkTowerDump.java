@@ -16,7 +16,7 @@ public class ArpavNetworkTowerDump {
     public static int THREAD_SLEEP_ERROR = 500;//tempo di attesa dopo una ecezzione
     public static int FOUNDED = 0;
     public static int RANDOMIZE_TIME = 0;
-    public static int RETRY = 10;
+    public static int RETRY = 3;
 
     public static int MIN_ID = 0;
     public static int MAX_ID = 0;
@@ -24,12 +24,16 @@ public class ArpavNetworkTowerDump {
     public static int threadCompleted = 0;
 
     public static void main(String[] args) throws IOException {
-        if (args.length == 3) {
+        System.out.println("THR_SLEEP #THR FROM_ID TO_ID");
+        THREAD_SLEEP_MS=Integer.parseInt(args[0]);
+        if (args.length >= 3) {
             THREAD_NUMBER = 1;
-            System.out.println("FROM: " + args[1]);
-            System.out.println("TO: " + args[2]);
-            MIN_ID = Integer.parseInt(args[1]);
-            MAX_ID = Integer.parseInt(args[2]);
+            System.out.println("# THREAD:       " + args[0]);
+            System.out.println("THREAD_SLEEP_MS:    " + args[1]);
+            System.out.println("FROM:       " + args[2]);
+            System.out.println("TO:         " + args[3]);
+            MIN_ID = Integer.parseInt(args[2]);
+            MAX_ID = Integer.parseInt(args[3]);
             ArpavNetworkTowerDump thisClass = new ArpavNetworkTowerDump();
             thisClass.setAndStart();
         } else {
@@ -244,6 +248,8 @@ public class ArpavNetworkTowerDump {
             temp2 = temp2[1].split("</p>");
             line = line + temp2[0].concat("%");
 
+            System.out.println(number + "       Dumped");
+            
             try {
                 writer.write(line);
             } catch (IOException ex) {
