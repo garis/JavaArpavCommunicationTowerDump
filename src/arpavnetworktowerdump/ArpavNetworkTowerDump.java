@@ -4,6 +4,7 @@ import java.net.*;
 import java.io.*;
 import java.nio.charset.Charset;
 import java.nio.file.*;
+import java.util.ArrayList;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -13,25 +14,36 @@ public class ArpavNetworkTowerDump {
 
     public static int THREAD_NUMBER = 1;
     public static int THREAD_SLEEP_MS = 500; //quanto riposa il thread prima di ricominciare
-    public static int THREAD_SLEEP_ERROR = 500;//tempo di attesa dopo una ecezzione
+    public static int THREAD_SLEEP_ERROR = 50;//tempo di attesa dopo una ecezzione
     public static int FOUNDED = 0;
     public static int RANDOMIZE_TIME = 0;
-    public static int RETRY = 3;
+    public static int RETRY = 2;
+    public static boolean INCREMENTAL_WAIT = false;
 
     public static int MIN_ID = 0;
     public static int MAX_ID = 0;
 
+    public static int TARGET_THREAD_SLEEP_MS = 500;
+
     public static int threadCompleted = 0;
 
     public static void main(String[] args) throws IOException {
-        System.out.println("THR_SLEEP #THR FROM_ID TO_ID");
-        THREAD_SLEEP_MS=Integer.parseInt(args[0]);
+        System.out.println("THR_SLEEP #THR FROM_ID TO_ID INCREMENTAL_WAIT");
+        THREAD_SLEEP_MS = Integer.parseInt(args[0]);
         if (args.length >= 3) {
             THREAD_NUMBER = 1;
             System.out.println("# THREAD:       " + args[0]);
-            System.out.println("THREAD_SLEEP_MS:    " + args[1]);
+            THREAD_SLEEP_MS = Integer.parseInt(args[1]);
+            if (THREAD_SLEEP_MS <= 0) {
+                System.out.println("THREAD_SLEEP_MS <= 0 not allowed");
+                return;
+            }
+            System.out.println("THREAD_SLEEP_MS:    " + THREAD_SLEEP_MS);
+            TARGET_THREAD_SLEEP_MS = THREAD_SLEEP_MS;
             System.out.println("FROM:       " + args[2]);
             System.out.println("TO:         " + args[3]);
+            INCREMENTAL_WAIT = Boolean.parseBoolean(args[4]);
+            System.out.println("Incremental:         " + INCREMENTAL_WAIT);
             MIN_ID = Integer.parseInt(args[2]);
             MAX_ID = Integer.parseInt(args[3]);
             ArpavNetworkTowerDump thisClass = new ArpavNetworkTowerDump();
@@ -110,14 +122,11 @@ public class ArpavNetworkTowerDump {
         int name = -1;
 
         public void run() {
+            ArrayList<failedID> elements = new ArrayList<>();
             if (writer != null) {
                 for (int i = start; i <= end; i++) {
-                    try {
-                        initializeDump(writer, i);
-                    } catch (InterruptedException ex) {
-                        Logger.getLogger(ArpavNetworkTowerDump.class.getName()).log(Level.SEVERE, null, ex);
-                    } catch (IOException ex) {
-                        Logger.getLogger(ArpavNetworkTowerDump.class.getName()).log(Level.SEVERE, null, ex);
+                    if (initializeDump(writer, i) != 0) {
+                        elements.add(new failedID(i, true));
                     }
                     try {
                         Thread.sleep((long) (THREAD_SLEEP_MS + Math.random() * RANDOMIZE_TIME));
@@ -125,6 +134,20 @@ public class ArpavNetworkTowerDump {
                         Logger.getLogger(ArpavNetworkTowerDump.class.getName()).log(Level.SEVERE, null, ex);
                     }
                 }
+                boolean loopAgain = true;
+                while (loopAgain == true) {
+                    loopAgain = false;
+                    for (failedID idRedo : elements) {
+                        if (idRedo.isFailed() == true) {
+                            if (initializeDump(writer, idRedo.getID()) != 0) {
+                                loopAgain = true;
+                            } else {
+                                idRedo.isFailed(false);
+                            }
+                        }
+                    }
+                }
+
                 threadCompleted++;
                 try {
                     if (threadCompleted == THREAD_NUMBER) {
@@ -144,7 +167,38 @@ public class ArpavNetworkTowerDump {
         }
     }
 
-    public void initializeDump(Writer writer, int number) throws IOException, InterruptedException {
+    public class failedID {
+
+        boolean failed;
+        int id;
+
+        public failedID() {
+        }
+
+        public failedID(int number, boolean esito) {
+            id = number;
+            failed = esito;
+        }
+
+        public int getID() {
+            return id;
+        }
+
+        public boolean isFailed() {
+            return failed;
+        }
+
+        public void setID(int number) {
+            id = number;
+        }
+
+        public void isFailed(boolean result) {
+            failed = result;
+        }
+    }
+
+    //ritorna 0 se successo, altro se c'e stato un errore
+    public int initializeDump(Writer writer, int number) {
 
         String url = "http://map.arpa.veneto.it/contents/agenti_fisici/htm/scheda.jsp?id_sito=" + number;
         int numberTried = 0;
@@ -153,15 +207,25 @@ public class ArpavNetworkTowerDump {
             try {
                 getPage(writer, url, number);
                 numberTried = RETRY + 1;       //successo, RETRY+1 evita il sucessivo if
+                THREAD_SLEEP_MS = TARGET_THREAD_SLEEP_MS;
+                return 0;
             } catch (IOException ex) {
                 numberTried++;
                 error = ex.getLocalizedMessage();
-                Thread.sleep((long) (THREAD_SLEEP_ERROR + Math.random() * RANDOMIZE_TIME));
+                try {
+                    Thread.sleep((long) (THREAD_SLEEP_ERROR + Math.random() * RANDOMIZE_TIME));
+                } catch (InterruptedException ex1) {
+                    System.out.println(number + " " + (RETRY + 1) + " error: " + ex1.getLocalizedMessage());
+                }
             }
         }
         if (numberTried == RETRY) {
             System.out.println(number + " " + (RETRY + 1) + " error: " + error);
         }
+        if (INCREMENTAL_WAIT == true) {
+            THREAD_SLEEP_MS = THREAD_SLEEP_MS * 2;
+        }
+        return 2;
     }
 
     public void getPage(Writer writer, String pageAddress, int number) throws MalformedURLException, IOException {
@@ -249,7 +313,7 @@ public class ArpavNetworkTowerDump {
             line = line + temp2[0].concat("%");
 
             System.out.println(number + "       Dumped");
-            
+
             try {
                 writer.write(line);
             } catch (IOException ex) {
