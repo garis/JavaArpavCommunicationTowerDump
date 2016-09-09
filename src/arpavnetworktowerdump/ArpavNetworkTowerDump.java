@@ -207,7 +207,7 @@ public class ArpavNetworkTowerDump {
             try {
                 getPage(writer, url, number);
                 numberTried = RETRY + 1;       //successo, RETRY+1 evita il sucessivo if
-                THREAD_SLEEP_MS = THREAD_SLEEP_MS / 3;
+                THREAD_SLEEP_MS = THREAD_SLEEP_MS / 2;
                 if (THREAD_SLEEP_MS < TARGET_THREAD_SLEEP_MS && INCREMENTAL_WAIT == true) {
                     THREAD_SLEEP_MS = TARGET_THREAD_SLEEP_MS;
                 }
