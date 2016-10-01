@@ -28,6 +28,9 @@ public class ArpavNetworkTowerDump {
     public static int threadCompleted = 0;
 
     public static void main(String[] args) throws IOException {
+        ArpavNetworkTowerDump a=new ArpavNetworkTowerDump();
+        a.LaunchNewDumper();
+        /*
         System.out.println("THR_SLEEP #THR FROM_ID TO_ID INCREMENTAL_WAIT");
         THREAD_SLEEP_MS = Integer.parseInt(args[0]);
         if (args.length >= 3) {
@@ -51,9 +54,14 @@ public class ArpavNetworkTowerDump {
         } else {
             ArpavNetworkTowerDump thisClass = new ArpavNetworkTowerDump();
             thisClass.setAndStart();
-        }
+        }*/
     }
 
+    public void LaunchNewDumper()
+    {
+        NewDumper nd=new NewDumper();
+    }
+    
     public class Writer {
 
         BufferedWriter writer = null;
@@ -297,13 +305,19 @@ public class ArpavNetworkTowerDump {
             x = Double.parseDouble(temp2[0]);
             temp2 = temp2[1].split(" y");
             y = Double.parseDouble(temp2[0]);
-            double[] lat_lon = UTMtoLatLon.toLatLon(x, y, "N");
-            line = line + lat_lon[0] + "%" + lat_lon[1] + "%";
+            double[] lon_lat = UTMtoLatLon.toLatLon(x, y, "N");
+
+            //Correzione temporanea
+            lon_lat[0] = lon_lat[0] - 0.0007761;
+            lon_lat[1] = lon_lat[1] - 0.0010879;
+
+            line = line + lon_lat[0] + "%" + lon_lat[1] + "%";
 
             //Quota al suolo
             temp2 = temp1[6].split("</b>: ");
             temp2 = temp2[1].split("m s.l.m.");
-            line = line + temp2[0].concat("%");
+            temp2[0]=temp2[0].replace(" ", "");
+            line = line + "\"" + temp2[0].concat("\"%");
 
             //Postazione
             temp2 = temp1[7].split("</b>: ");
@@ -313,7 +327,7 @@ public class ArpavNetworkTowerDump {
             //Altezza centro elettrico dal suolo
             temp2 = temp1[8].split(": ");
             temp2 = temp2[1].split("</p>");
-            line = line + temp2[0].concat("%");
+            line = line + "\"" + temp2[0].concat("\"%");
 
             System.out.println(number + "       Dumped");
 
