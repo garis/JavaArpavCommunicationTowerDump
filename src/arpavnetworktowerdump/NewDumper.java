@@ -17,6 +17,7 @@ import java.net.URL;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -35,11 +36,13 @@ public class NewDumper {
     //maxy%3D%225541286%2C76875152%22+maxx
     //private double maxX = 1988669.0020340548, minX = 1463256.1432436276, maxY = 5541286.76875152, minY = 4257920.483346367;
     private double maxX = 1826761.68, minX = 1619977.64, maxY = 5184560.83, minY = 4968491.89;
-    private double subDivision = 40;
+    private double subDivision = 45;
+    private double tollerance = 1 / 5;
     private double xStep = (maxX - minX) / subDivision;
     private double yStep = (maxY - minY) / subDivision;
 
     private int dumpedTowers = 0;
+    private ArrayList<Integer> torri;
 
     public NewDumper() {
 
@@ -68,6 +71,7 @@ public class NewDumper {
 
         int x = 0, y = 0;
 
+        torri = new ArrayList();
         for (x = 0; x < subDivision; x++) {
             for (y = 0; y < subDivision; y++) {
                 System.out.println("QUADRANTE " + x + " " + y);
@@ -79,11 +83,11 @@ public class NewDumper {
                         } else {
                             urlParameters = firstURLParam;
                         }
-                        //maxy+maxx+miny+minx
-                        urlParameters = urlParameters.replace("maxy", ("maxy%3D%22" + ("" + (minY + yStep * (((double)y) + 1))).replace(".", "%2C") + "%22"));
-                        urlParameters = urlParameters.replace("maxx", ("maxx%3D%22" + ("" + (minX + xStep * (((double)x) + 1))).replace(".", "%2C") + "%22"));
-                        urlParameters = urlParameters.replace("miny", ("miny%3D%22" + ("" + (minY + yStep * (((double)y)))).replace(".", "%2C") + "%22"));
-                        urlParameters = urlParameters.replace("minx", ("minx%3D%22" + ("" + (minX + xStep * (((double)x)))).replace(".", "%2C") + "%22"));
+                        //maxy+maxx+miny+minx e un po' di tolleranza
+                        urlParameters = urlParameters.replace("maxy", ("maxy%3D%22" + ("" + (minY + yStep * (((double) y) + 1)) + yStep * tollerance).replace(".", "%2C") + "%22"));
+                        urlParameters = urlParameters.replace("maxx", ("maxx%3D%22" + ("" + (minX + xStep * (((double) x) + 1)) + xStep * tollerance).replace(".", "%2C") + "%22"));
+                        urlParameters = urlParameters.replace("miny", ("miny%3D%22" + ("" + (minY + yStep * (((double) y)) - yStep * tollerance)).replace(".", "%2C") + "%22"));
+                        urlParameters = urlParameters.replace("minx", ("minx%3D%22" + ("" + (minX + xStep * (((double) x)) - xStep * tollerance)).replace(".", "%2C") + "%22"));
                         // Send post request
                         String url = "http://map.arpa.veneto.it/servlet/com.esri.esrimap.Esrimap?ServiceName=etere_new&CustomService=Query&ClientVersion=4.0&Form=True&Encode=False";
                         URL obj = new URL(url);
@@ -145,28 +149,41 @@ public class NewDumper {
         parts[parts.length - 1] = parts[parts.length - 1].split("<FEATURECOUNT")[0];
         String[] temp1;
         double[] lon_lat;
+        int idSito;
         for (int i = 1; i < parts.length; i++) {
             //IDSITO
             temp1 = parts[i].split("IDSITO=\"");
             temp1 = temp1[1].split("\"");
-            lon_lat = UTMtoLatLon.toLatLon(Double.parseDouble(temp1[8]), Double.parseDouble(temp1[10]), "N");
 
-            //Correzione temporanea
-            lon_lat[0] = lon_lat[0] - 0.0007761;
-            lon_lat[1] = lon_lat[1] - 0.0010879;
+            //evita di inserire doppioni
+            idSito = Integer.parseInt(temp1[0]);
+            while (torri.size() < idSito + 1) {
+                torri.add(0);
+            }
 
-            line = line + temp1[0] + ","
-                    + temp1[2] + ","
-                    + temp1[4] + ","
-                    + temp1[6] + ","
-                    + lon_lat[0] + ","
-                    + lon_lat[1] + ","
-                    + temp1[12] + ","
-                    + temp1[14] + ","
-                    + temp1[16] + ","
-                    + temp1[18] + "\n";
-            dumpedTowers++;
-            System.out.println("DUMPED " + dumpedTowers + " TOWERS.   LAST ID: " + temp1[0]);
+            if (torri.get(idSito) == 0) {
+                torri.set(idSito,1);
+                lon_lat = UTMtoLatLon.toLatLon(Double.parseDouble(temp1[8]), Double.parseDouble(temp1[10]), "N");
+
+                //Correzione temporanea
+                lon_lat[0] = lon_lat[0] - 0.0007761;
+                lon_lat[1] = lon_lat[1] - 0.0010879;
+
+                line = line + temp1[0] + ","
+                        + temp1[2] + ","
+                        + temp1[4] + ","
+                        + temp1[6] + ","
+                        + lon_lat[0] + ","
+                        + lon_lat[1] + ","
+                        + temp1[12] + ","
+                        + temp1[14] + ","
+                        + temp1[16] + ","
+                        + temp1[18] + "\n";
+                dumpedTowers++;
+                System.out.println("DUMPED " + dumpedTowers + " TOWERS.   LAST ID: " + temp1[0]);
+            } else {
+                System.out.println("DUMPED " + dumpedTowers + " TOWERS.   LAST ID: " + temp1[0] + " ALREADY PRESENT");
+            }
         }
         return line;
     }
