@@ -16,7 +16,10 @@ import java.net.ProtocolException;
 import java.net.URL;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -29,113 +32,177 @@ public class NewDumper {
 
     private final String USER_AGENT = "Mozilla/5.0";
 
-    private String firstURLParam = "ArcXMLRequest=%3C%3Fxml+version%3D%221.0%22+encoding%3D%22UTF-8%22+%3F%3E%3CARCXML+version%3D%221.1%22%3E%0D%0A%3CREQUEST%3E%0D%0A%3CGET_FEATURES+outputmode%3D%22xml%22+envelope%3D%22false%22+checkesc+%3D%22true%22+geometry%3D%22false%22+featurelimit%3D%2225%22%3E%0D%0A%3CLAYER+id%3D%220%22+%2F%3E%3CSPATIALQUERY+subfields%3D%22%23SHAPE%23+IDSITO+NOME+X_SITO+Y_SITO+Z_SITO+CODSITO+GESTORE+INDIRIZZO+COMUNE+PROVINCIA%22%3E%3CSPATIALFILTER+relation%3D%22area_intersection%22+%3E%3CENVELOPE+maxy+maxx+miny+minx+%2F%3E%3C%2FSPATIALFILTER%3E%3C%2FSPATIALQUERY%3E%3C%2FGET_FEATURES%3E%3C%2FREQUEST%3E%3C%2FARCXML%3E&";
     private String secondURLParam1 = "ArcXMLRequest=%3C%3Fxml+version%3D%221.0%22+encoding%3D%22UTF-8%22+%3F%3E%3CARCXML+version%3D%221.1%22%3E%0D%0A%3CREQUEST%3E%0D%0A%3CGET_FEATURES+outputmode%3D%22xml%22+envelope%3D%22false%22+checkesc+%3D%22true%22+geometry%3D%22false%22+featurelimit%3D%2225%22+beginrecord%3D%22";
     private String secondURLParam2 = "%22%3E%0D%0A%3CLAYER+id%3D%220%22+%2F%3E%3CSPATIALQUERY+subfields%3D%22%23SHAPE%23+IDSITO+NOME+X_SITO+Y_SITO+Z_SITO+CODSITO+GESTORE+INDIRIZZO+COMUNE+PROVINCIA%22%3E%3CSPATIALFILTER+relation%3D%22area_intersection%22+%3E%3CENVELOPE+maxy+maxx+miny+minx+%2F%3E%3C%2FSPATIALFILTER%3E%3C%2FSPATIALQUERY%3E%3C%2FGET_FEATURES%3E%3C%2FREQUEST%3E%3C%2FARCXML%3E&";
 
-    //maxy%3D%225541286%2C76875152%22+maxx
-    //private double maxX = 1988669.0020340548, minX = 1463256.1432436276, maxY = 5541286.76875152, minY = 4257920.483346367;
     private double maxX = 1826761.68, minX = 1619977.64, maxY = 5184560.83, minY = 4968491.89;
-    private double subDivision = 40;
+    private double subDivision = 15;
     private double tollerance = 0.2d;
     private double xStep = (maxX - minX) / subDivision;
     private double yStep = (maxY - minY) / subDivision;
+    private long WAIT = 0;
+    private String fileName = "dump.csv";
 
     private int dumpedTowers = 0;
     private ArrayList<Integer> torri;
 
-    public NewDumper() {
-
-        int j = 0;
-        //send first post
-
-        String urlParameters;
+    private void LoadFile() {
 
         Charset charset = Charset.forName("UTF-8");
-        BufferedWriter writer = null;
-        try {
-            writer = Files.newBufferedWriter(Paths.get("dump.csv"), charset);
-        } catch (IOException ex) {
-            Logger.getLogger(NewDumper.class.getName()).log(Level.SEVERE, null, ex);
+        try (BufferedReader reader = Files.newBufferedReader(Paths.get(fileName), charset)) {
+            String line = null;
+            reader.readLine();
+            int idSito = -1;
+            while ((line = reader.readLine()) != null) {
+                idSito = Integer.parseInt(line.split(",")[0]);
+                while (torri.size() < idSito + 1) {
+                    torri.add(0);
+                }
+                torri.set(idSito, 1);
+
+            }
+        } catch (IOException x) {
+            System.err.format("IOException: %s%n", x);
         }
-        try {
-            writer.write("IDSITO,NOME,COD SITO,INDIRIZZO,Longitudine,Latitudine,Altezza,GESTORE,PROVINCIA,COMUNE\n");
-        } catch (IOException ex) {
-            Logger.getLogger(NewDumper.class.getName()).log(Level.SEVERE, null, ex);
-        }
-        String line;
-        DataOutputStream wr = null;
-        BufferedReader rd = null;
-        int startLoop = 0;
-        int endLoop = 10000000;
+    }
 
-        int x = 0, y = 0;
+    public NewDumper() {
 
-        torri = new ArrayList();
-        for (x = 0; x < subDivision; x++) {
-            for (y = 0; y < subDivision; y++) {
-                System.out.println("QUADRANTE " + x + " " + y);
-                try {
-                    for (int i = startLoop; i < endLoop; i++) {
+        for (int h = 2; h < 30; h++) {
+            subDivision = h;
+            xStep = (maxX - minX) / subDivision;
+            yStep = (maxY - minY) / subDivision;
 
-                        if (i > 0) {
-                            urlParameters = secondURLParam1 + i * 25 + 1 + secondURLParam2;
-                        } else {
-                            urlParameters = firstURLParam;
-                        }
-                        //maxy+maxx+miny+minx e un po' di tolleranza
-                        urlParameters = urlParameters.replace("maxy", ("maxy%3D%22" + ("" + (minY + yStep * (((double) y) + 1)) + yStep * tollerance).replace(".", "%2C") + "%22"));
-                        urlParameters = urlParameters.replace("maxx", ("maxx%3D%22" + ("" + (minX + xStep * (((double) x) + 1)) + xStep * tollerance).replace(".", "%2C") + "%22"));
-                        urlParameters = urlParameters.replace("miny", ("miny%3D%22" + ("" + (minY + yStep * (((double) y)) - yStep * tollerance)).replace(".", "%2C") + "%22"));
-                        urlParameters = urlParameters.replace("minx", ("minx%3D%22" + ("" + (minX + xStep * (((double) x)) - xStep * tollerance)).replace(".", "%2C") + "%22"));
-                        // Send post request
-                        String url = "http://map.arpa.veneto.it/servlet/com.esri.esrimap.Esrimap?ServiceName=etere_new&CustomService=Query&ClientVersion=4.0&Form=True&Encode=False";
-                        URL obj = new URL(url);
-                        HttpURLConnection con = (HttpURLConnection) obj.openConnection();
+            int j = 0;
 
-                        //add reuqest header
-                        con.setRequestMethod("POST");
-                        con.setRequestProperty("User-Agent", USER_AGENT);
-                        con.setRequestProperty("Accept-Language", "en-US,en;q=0.5");
-                        con.setDoOutput(true);
+            String urlParameters;
 
-                        wr = new DataOutputStream(con.getOutputStream());
-                        wr.writeBytes(urlParameters);
-                        wr.flush();
+            torri = new ArrayList();
 
-                        // Get the response
-                        rd = new BufferedReader(
-                                new InputStreamReader(con.getInputStream()));
+            LoadFile();
 
-                        j = 0;
-                        while ((line = rd.readLine()) != null) {
-                            if (j == 2) {
-                                if (line.contains("hasmore=\"false\"")) {
-                                    i = endLoop;
-                                    break;
-                                }
-                                writer.write(LineParser(line));
-                            }
-                            j++;
-                        }
-                        writer.flush();
+            Charset charset = Charset.forName("UTF-8");
+            BufferedWriter writer = null;
+
+            boolean writeHeader = false;
+            if (!Files.exists(Paths.get(fileName))) {
+                writeHeader = true;
+            }
+
+            try {
+                writer = Files.newBufferedWriter(Paths.get(fileName), charset, StandardOpenOption.APPEND);
+            } catch (IOException ex) {
+                Logger.getLogger(NewDumper.class.getName()).log(Level.SEVERE, null, ex);
+            }
+            try {
+                if (writeHeader) {
+                    writer.write("IDSITO,NOME,COD SITO,INDIRIZZO,Longitudine,Latitudine,Altezza,GESTORE,PROVINCIA,COMUNE\n");
+                }
+            } catch (IOException ex) {
+                Logger.getLogger(NewDumper.class.getName()).log(Level.SEVERE, null, ex);
+            }
+            String line;
+            DataOutputStream wr = null;
+            BufferedReader rd = null;
+            int startLoop = 0;
+            int endLoop = 10000000;
+            double coord = 0;
+            //double xmi, xma, ymi, yma;
+
+            int x = -1, y = -1;
+            int countX = 0, countY = 0;
+
+            for (x = (int) (Math.random() * subDivision); countX < subDivision; countX++) {
+                x++;
+                countY = 0;
+                for (y = (int) (Math.random() * subDivision); countY < subDivision; countY++) {
+                    y++;
+                    if (x >= subDivision) {
+                        x = 0;
                     }
-                    rd.close();
-                    wr.close();
+                    if (y >= subDivision) {
+                        y = 0;
+                    }
 
-                } catch (MalformedURLException ex) {
-                    Logger.getLogger(NewDumper.class.getName()).log(Level.SEVERE, null, ex);
-                } catch (ProtocolException ex) {
-                    Logger.getLogger(NewDumper.class.getName()).log(Level.SEVERE, null, ex);
-                } catch (IOException ex) {
-                    Logger.getLogger(NewDumper.class.getName()).log(Level.SEVERE, null, ex);
+                    System.out.println("QUADRANTE " + x + " " + y+" SUBS: "+h);
+                    try {
+                        for (int i = startLoop; i < endLoop; i++) {
+                            Thread.sleep(WAIT);
+                            urlParameters = secondURLParam1 + i * 25 + 1 + secondURLParam2;
+
+                            //maxy+maxx+miny+minx e un po' di tolleranza
+                            coord = minY + yStep * ((double) (y + 1)) + yStep * tollerance;
+                            // yma = coord;
+                            urlParameters = urlParameters.replace("maxy", ("maxy%3D%22" + ("" + coord).replace(".", "%2C") + "%22"));
+                            coord = minX + xStep * ((double) (x + 1)) + xStep * tollerance;
+                            // xma = coord;
+                            urlParameters = urlParameters.replace("maxx", ("maxx%3D%22" + ("" + coord).replace(".", "%2C") + "%22"));
+                            coord = minY + yStep * ((double) y) - yStep * tollerance;
+                            // ymi = coord;
+                            urlParameters = urlParameters.replace("miny", ("miny%3D%22" + ("" + coord).replace(".", "%2C") + "%22"));
+                            coord = minX + xStep * ((double) x) - xStep * tollerance;
+                            // xmi = coord;
+                            urlParameters = urlParameters.replace("minx", ("minx%3D%22" + ("" + coord).replace(".", "%2C") + "%22"));
+
+                            /* lon_lat = UTMtoLatLon.toLatLon(xmi, ymi, "N");
+                        writer.write("1," + lon_lat[0] + "," + lon_lat[1] + "\n");
+                        lon_lat = UTMtoLatLon.toLatLon(xmi, yma, "N");
+                        writer.write("2," + lon_lat[0] + "," + lon_lat[1] + "\n");
+                        lon_lat = UTMtoLatLon.toLatLon(xma, yma, "N");
+                        writer.write("3," + lon_lat[0] + "," + lon_lat[1] + "\n");
+                        lon_lat = UTMtoLatLon.toLatLon(xma, ymi, "N");
+                        writer.write("4," + lon_lat[0] + "," + lon_lat[1] + "\n");*/
+                            // Send post request
+                            String url = "http://map.arpa.veneto.it/servlet/com.esri.esrimap.Esrimap?ServiceName=etere_new&CustomService=Query&ClientVersion=4.0&Form=True&Encode=False";
+                            URL obj = new URL(url);
+                            HttpURLConnection con = (HttpURLConnection) obj.openConnection();
+
+                            //add reuqest header
+                            con.setRequestMethod("POST");
+                            con.setRequestProperty("User-Agent", USER_AGENT);
+                            con.setRequestProperty("Accept-Language", "en-US,en;q=0.5");
+                            con.setDoOutput(true);
+
+                            wr = new DataOutputStream(con.getOutputStream());
+                            wr.writeBytes(urlParameters);
+                            wr.flush();
+
+                            // Get the response
+                            rd = new BufferedReader(
+                                    new InputStreamReader(con.getInputStream()));
+
+                            j = 0;
+                            while ((line = rd.readLine()) != null) {
+                                if (j == 2) {
+                                    if (line.contains("hasmore=\"false\"")) {
+                                        i = endLoop;
+                                        break;
+                                    }
+                                    writer.write(LineParser(line));
+                                }
+                                j++;
+                            }
+                            writer.flush();
+                        }
+                        rd.close();
+                        wr.close();
+
+                    } catch (MalformedURLException ex) {
+                        Logger.getLogger(NewDumper.class.getName()).log(Level.SEVERE, null, ex);
+                    } catch (ProtocolException ex) {
+                        Logger.getLogger(NewDumper.class.getName()).log(Level.SEVERE, null, ex);
+                    } catch (IOException ex) {
+                        Logger.getLogger(NewDumper.class.getName()).log(Level.SEVERE, null, ex);
+                    } catch (InterruptedException ex) {
+                        Logger.getLogger(NewDumper.class.getName()).log(Level.SEVERE, null, ex);
+                    }
                 }
             }
-        }
-        try {
-            writer.close();
-        } catch (IOException ex) {
-            Logger.getLogger(NewDumper.class.getName()).log(Level.SEVERE, null, ex);
+            try {
+                writer.close();
+            } catch (IOException ex) {
+                Logger.getLogger(NewDumper.class.getName()).log(Level.SEVERE, null, ex);
+            }
         }
     }
 
@@ -162,7 +229,7 @@ public class NewDumper {
             }
 
             if (torri.get(idSito) == 0) {
-                torri.set(idSito,1);
+                torri.set(idSito, 1);
                 lon_lat = UTMtoLatLon.toLatLon(Double.parseDouble(temp1[8]), Double.parseDouble(temp1[10]), "N");
 
                 //Correzione temporanea
